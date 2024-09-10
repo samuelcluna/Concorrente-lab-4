@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sync"
 )
 
-// read a file from a filepath and return a slice of bytes
 func readFile(filePath string) ([]byte, error) {
 	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
@@ -16,7 +16,6 @@ func readFile(filePath string) ([]byte, error) {
 	return data, nil
 }
 
-// sum all bytes of a file
 func sum(filePath string) (int, error) {
 	data, err := readFile(filePath)
 	if err != nil {
@@ -31,25 +30,51 @@ func sum(filePath string) (int, error) {
 	return _sum, nil
 }
 
-// print the totalSum for all files and the files with equal sum
+func worker(filePath string, barrier *sync.WaitGroup, totalSumChan chan int64, sumMapChan chan map[int][]string) {
+	defer barrier.Done()
+
+	_sum, err := sum(filePath)
+	if err != nil {
+		return
+	}
+
+	totalSumChan <- int64(_sum)
+
+	sumMap := make(map[int][])
+	sumMap[_sum] = append(sumMap[_sum], filePath)
+	sumMapChan <- sumMap
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: go run main.go <file1> <file2> ...")
 		return
 	}
 
+	var barrier sync.WaitGroup
+	totalSumChan := make(chan int64, len(os.Args)-1)
+	sumMapChan := make(chan map[int][]string, len(os.Args)-1)
+
+	for _, path := range os.Args[1:] {
+		barrier.Add(1)
+		go worker(path, &barrier, totalSumChan, sumMapChan)
+	}
+
+	barrier.Wait()
+	close(totalSumChan)
+	close(sumMapChan)
+
 	var totalSum int64
 	sums := make(map[int][]string)
-	for _, path := range os.Args[1:] {
-		_sum, err := sum(path)
 
-		if err != nil {
-			continue
+	for ts := range totalSumChan {
+		totalSum += ts
+	}
+
+	for sm := range sumMapChan {
+		for sum, files := range sm {
+			sums[sum] = append(sums[sum], files...)
 		}
-
-		totalSum += int64(_sum)
-
-		sums[_sum] = append(sums[_sum], path)
 	}
 
 	fmt.Println(totalSum)
