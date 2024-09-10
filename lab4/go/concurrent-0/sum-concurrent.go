@@ -40,7 +40,7 @@ func worker(filePath string, barrier *sync.WaitGroup, totalSumChan chan int64, s
 
 	totalSumChan <- int64(_sum)
 
-	sumMap := make(map[int][])
+	sumMap := make(map[int][]string)
 	sumMap[_sum] = append(sumMap[_sum], filePath)
 	sumMapChan <- sumMap
 }
